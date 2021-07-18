@@ -175,11 +175,11 @@ class DarkNet(nn.Module):  # input n channel 512 512
 
 
 
-if __name__ == '__main__':
-    net = DarkNet()
-    a = torch.rand(32, 3, 512, 512)
-    a, b, c = net(a)
-    print(123)
+# if __name__ == '__main__':
+#     net = DarkNet()
+#     a = torch.rand(1, 3, 416, 416)
+#     a, b, c = net(a)
+#     print(123)
 
 
 

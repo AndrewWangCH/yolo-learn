@@ -34,12 +34,12 @@ class YoloBody(nn.Module):
     def __init__(self, num_class, img_channel=3):
         super(YoloBody, self).__init__()
         # ---------------------------------------------------#
-        #   输入图片是512*512
+        #   输入图片是416*416
         #   生成darknet53的主干模型
         #   获得三个有效特征层，他们的shape分别是：
-        #   256,64,64
-        #   512,32,32
-        #   1024,16,16
+        #   256,52,51
+        #   512,26,26
+        #   1024,13,13
         # ---------------------------------------------------#
         self.backbone = darknet.DarkNet(img_channel=img_channel)
 
@@ -66,7 +66,7 @@ class YoloBody(nn.Module):
 
 # if __name__ == '__main__':
 #     net = YoloBody(num_class=20)
-#     a = torch.rand(1, 3, 512, 512)
+#     a = torch.rand(1, 3, 416, 416)
 #     _a, _b, _c = net(a)
 #
 #     print(123)
