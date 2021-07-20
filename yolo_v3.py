@@ -1,8 +1,11 @@
-import torch
+# 将backbone输出的特征层进行处理得到 “yolov3层”
+
 import torch.nn as nn
 from collections import OrderedDict
 from backbone import darknet
+import torch
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def conv2d(filter_in, filter_out, kernel_size):
     pad = (kernel_size - 1) // 2 if kernel_size else 0
@@ -31,7 +34,7 @@ def make_last_layers(filters_list, in_filters, out_filter):
 
 
 class YoloBody(nn.Module):
-    def __init__(self, num_class, img_channel=3):
+    def __init__(self, config):
         super(YoloBody, self).__init__()
         # ---------------------------------------------------#
         #   输入图片是416*416
@@ -41,9 +44,13 @@ class YoloBody(nn.Module):
         #   512,26,26
         #   1024,13,13
         # ---------------------------------------------------#
-        self.backbone = darknet.DarkNet(img_channel=img_channel)
+        img_channel = config["img_channel"]
+        num_class = config["yolo"]["classes"]
+        num_anchor = config["yolo"]["anchors"][0]   # 默认每组的anchor个数一样
 
-        final_out_filter = (num_class + 1 + 4) * 3
+        self.backbone = darknet.DarkNet(img_channel=img_channel).to(device)
+
+        final_out_filter = (num_class + 1 + 4) * num_anchor     # num_anchor-->代表一组有几个anchors
         self.last_layer0 = make_last_layers([512, 1024], 1024, final_out_filter)
         self.last_layer1 = make_last_layers([256, 512], 512, final_out_filter)
         self.last_layer2 = make_last_layers([128, 256], 256, final_out_filter)
