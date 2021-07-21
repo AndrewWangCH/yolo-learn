@@ -67,7 +67,7 @@ class ConvSet(nn.Module):
 
 # N = (W - F +2P) / S + 1
 class DarkNet(nn.Module):  # input n channel 512 512
-    def __init__(self, img_channel=3):
+    def __init__(self, img_channel=1):
         super(DarkNet, self).__init__()
 
         self.conv1 = MyConv(in_channel=img_channel, out_channel=32, kernel_size=3, padding=1, stride=1)  # 32 512 512

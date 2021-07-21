@@ -46,14 +46,14 @@ class YoloBody(nn.Module):
         # ---------------------------------------------------#
         img_channel = config["img_channel"]
         num_class = config["yolo"]["classes"]
-        num_anchor = config["yolo"]["anchors"][0]   # 默认每组的anchor个数一样
+        num_anchor = len(config["yolo"]["anchors"][0])   # 默认每组的anchor个数一样
 
         self.backbone = darknet.DarkNet(img_channel=img_channel).to(device)
 
         final_out_filter = (num_class + 1 + 4) * num_anchor     # num_anchor-->代表一组有几个anchors
         self.last_layer0 = make_last_layers([512, 1024], 1024, final_out_filter)
-        self.last_layer1 = make_last_layers([256, 512], 512, final_out_filter)
-        self.last_layer2 = make_last_layers([128, 256], 256, final_out_filter)
+        # self.last_layer1 = make_last_layers([256, 512], 512, final_out_filter)    // 此时只有一个先验框，且为大目标
+        # self.last_layer2 = make_last_layers([128, 256], 256, final_out_filter)
 
     def forward(self, x):
         def _branch(last_layer, layer_in):
@@ -63,12 +63,13 @@ class YoloBody(nn.Module):
 
         out0, out1, out2 = self.backbone(x)
         out0 = _branch(self.last_layer0, out0)
-        out1 = _branch(self.last_layer1, out1)
-        out2 = _branch(self.last_layer2, out2)
+        # out1 = _branch(self.last_layer1, out1)
+        # out2 = _branch(self.last_layer2, out2)
         # output1->final_out_filter, 16, 16, 75
         # output2->final_out_filter, 32, 32, 75
         # output3->final_out_filter, 64, 64, 75
-        return out0, out1, out2
+        # return out0, out1, out2
+        return out0
 
 
 # if __name__ == '__main__':

@@ -18,11 +18,11 @@ def fit_ont_epoch(net, yolo_losses, epoch, train_loader):
         target = target.to(device)
 
         optimizer.zero_grad()
-        outputs = net(images)   # 3个特征图
+        outputs = net(images).to(device)   # 3个特征图
         losses = []
         num_pos_all = 0
-        for i in range(3):
-            loss_item, num_pos = yolo_losses[i](outputs[i], target)
+        for i in range(1):
+            loss_item, num_pos = yolo_losses[i](outputs, target)
             losses.append(loss_item)
             num_pos_all += num_pos
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     normalize = True
 
-    train_dataset = dataset.MyDataset(data_path="C:\\Users\\wzl\\Desktop\\Flower\\data\\ElectricMester\\",
+    train_dataset = dataset.MyDataset(data_path="./data/number-test/",
                                       transform=dataset.image_transform)
 
     train_loader = dataset.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     # 建立yolo函数
     yolo_loss = []
-    for i in range(3):
+    for i in range(1):
         yolo_loss.append(yolo_v3_loss.YOLOLoss(np.reshape(yolo_config["yolo"]["anchors"], [-1, 2]),
                                                yolo_config["yolo"]["classes"], (yolo_config["img_w"], yolo_config["img_h"]), normalize))
 
@@ -72,5 +72,6 @@ if __name__ == "__main__":
 
     for epoch in range(500):
         fit_ont_epoch(net, yolo_loss, epoch, train_loader)
+        torch.save(net, './model/yolov3.pth')
 
 

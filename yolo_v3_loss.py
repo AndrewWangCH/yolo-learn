@@ -70,6 +70,7 @@ class YOLOLoss(nn.Module):
         self.anchors = anchors
         self.num_anchors = len(anchors)
         self.num_classes = num_class
+        self.bbox_attrs = 5 + num_class
         # -------------------------------------#
         #   获得特征层的宽高
         #   13、26、52
@@ -128,7 +129,7 @@ class YOLOLoss(nn.Module):
         #   batch_size, 3, 52, 52, 5 + num_classes
         #   prediction 是预测结果进行展开
         # -----------------------------------------------#
-        prediction = input.view(bs, int(self.num_anchors / 3), self.bbox_attrs, in_h, in_w).permute(0, 1, 3, 4,
+        prediction = input.view(bs, int(self.num_anchors), self.bbox_attrs, in_h, in_w).permute(0, 1, 3, 4,
                                                                                                     2).contiguous()
 
         # -----------待拟合的数据------------------------#
@@ -159,12 +160,6 @@ class YOLOLoss(nn.Module):
         mask, noobj_mask, tx, ty, tw, th, tconf, tcls, box_loss_scale_x, box_loss_scale_y = self.get_target(targets,
                                                                 scaled_anchors, in_w, in_h, self.ignore_threshold)
 
-
-        box_loss_scale_x = (box_loss_scale_x).cuda()
-        box_loss_scale_y = (box_loss_scale_y).cuda()
-        mask, noobj_mask = mask.cuda(), noobj_mask.cuda()
-        tx, ty, tw, th = tx.cuda(), ty.cuda(), tw.cuda(), th.cuda()
-        tconf, tcls = tconf.cuda(), tcls.cuda()
         box_loss_scale = 2 - box_loss_scale_x * box_loss_scale_y
 
         # 计算中心偏移情况的loss，使用BCELoss效果好一些
@@ -186,6 +181,9 @@ class YOLOLoss(nn.Module):
             num_pos = torch.max(num_pos, torch.ones_like(num_pos))  # 保证num_pos大于0
         else:
             num_pos = bs/3
+
+        print('loss: %.3f  loss_x: %.3f  loss_y: %.3f  loss_w: %.3f  loss_h: %.3f  loss_conf: %.3f  loss_cls: %.3f' % \
+              (loss.item(), loss_x.item(), loss_y.item(), loss_w.item(), loss_h.item(), loss_conf.item(), loss_cls.item()))
 
         return loss, num_pos
 
@@ -210,33 +208,33 @@ class YOLOLoss(nn.Module):
         # -------------------------------------------------------#
         #   创建全是0或者全是1的阵列
         # -------------------------------------------------------#
-        mask = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
-        noobj_mask = torch.ones(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
-        tx = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
-        ty = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
-        tw = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
-        th = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
-        tconf = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
-        tcls = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, self.num_classes, requires_grad=False)
+        mask = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        noobj_mask = torch.ones(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        tx = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        ty = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        tw = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        th = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        tconf = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        tcls = torch.zeros(bs, int(self.num_anchors), in_h, in_w, self.num_classes, requires_grad=False).cuda()
 
-        box_loss_scale_x = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
-        box_loss_scale_y = torch.zeros(bs, int(self.num_anchors / 3), in_h, in_w, requires_grad=False)
+        box_loss_scale_x = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        box_loss_scale_y = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
 
         for b in range(bs):  # 遍历一个batch_size
-            if len(bs[b]) == 0:  # 图中没有目标
+            if len(target[b]) == 0:  # 图中没有目标
                 continue  # 创建的阵列与此情况符合
 
             # -------------------------------------------------------#
             #   计算出正样本在特征层上的中心点
             # -------------------------------------------------------#
-            gxs = target[b][:, 0:1] * in_w
-            gys = target[b][:, 1:2] * in_h
+            gxs = target[b][:, 1:2] * in_w
+            gys = target[b][:, 2:3] * in_h
 
             # -------------------------------------------------------#
             #   计算出正样本相对于特征层的宽高
             # -------------------------------------------------------#
-            gws = target[b][:, 2:3] * in_w
-            ghs = target[b][:, 3:4] * in_h
+            gws = target[b][:, 3:4] * in_w
+            ghs = target[b][:, 4:5] * in_h
 
             # -------------------------------------------------------#
             #   计算出正样本属于特征层的哪个特征点(torch.floor-->向下取整)
@@ -248,13 +246,13 @@ class YOLOLoss(nn.Module):
             #   将真实框转换一个形式
             #   num_true_box, 4
             # -------------------------------------------------------#
-            gt_box = torch.FloatTensor(torch.cat([torch.zeros_like(gws), torch.zeros_like(ghs), gws, ghs], 1))
+            gt_box = torch.cuda.FloatTensor(torch.cat([torch.zeros_like(gws), torch.zeros_like(ghs), gws, ghs], 1))
 
             # -------------------------------------------------------#
             #   将先验框转换一个形式
             # -------------------------------------------------------#
-            anchor_shapes = torch.FloatTensor(
-                torch.cat((torch.zeros((self.num_anchors, 2)), torch.FloatTensor(anchors)), 1))
+            anchor_shapes = torch.FloatTensor(torch.cat((torch.zeros((self.num_anchors, 2)), torch.FloatTensor(anchors)), 1))
+            anchor_shapes = anchor_shapes.cuda()
 
             # -------------------------------------------------------#
             #   计算交并比
@@ -316,7 +314,7 @@ class YOLOLoss(nn.Module):
                     # ----------------------------------------#
                     #   tcls代表种类置信度
                     # ----------------------------------------#
-                    tcls[b, best_n, gj, gi, int(target[b][i, 4])] = 1
+                    tcls[b, best_n, gj, gi, int(target[b][i, 0])] = 1
                 else:
                     print("图像尺寸错误！！！")
                     continue

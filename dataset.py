@@ -4,6 +4,7 @@ from PIL import Image
 from torch.utils.data import DataLoader
 import os
 import numpy as np
+import config
 
 
 image_transform = transforms.Compose([
@@ -13,10 +14,13 @@ image_transform = transforms.Compose([
 
 class MyDataset(DataLoader):
     def __init__(self, data_path, transform):
-
-        self.image_path = data_path + 'images/'
-        self.label_path = data_path + 'labels/'
+        self.image_path = data_path + 'image/'
+        self.label_path = data_path + 'label/'
         self.transform = transform
+        self.img_channel = 1
+        if config.Config["img_channel"] == 1:
+            self.img_channel = 0
+
 
     def __len__(self):
         return len(self.image_path)
@@ -24,9 +28,9 @@ class MyDataset(DataLoader):
     def __getitem__(self, index):
         files = os.listdir(self.label_path)
         index_files = files[index]
-        image_name = index_files.split('.')[0] + '.jpg'
-        img = cv2.imread(self.image_path + image_name)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        image_name = index_files.split('.')[0] + '.png'
+        img = cv2.imread(self.image_path + image_name, self.img_channel)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(img)
         tensor_img = self.transform(pil_img)
         label_data = []
@@ -41,7 +45,7 @@ class MyDataset(DataLoader):
 
 
 # if __name__ == '__main__':
-#     train_dateset = MyDataset(data_path='./data/train/',
+#     train_dateset = MyDataset(data_path='./data/number-test/',
 #                               transform=image_transform)
 #
 #     train_dateset.__getitem__(1)
