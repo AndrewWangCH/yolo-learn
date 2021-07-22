@@ -65,9 +65,9 @@ class YoloBody(nn.Module):
         out0 = _branch(self.last_layer0, out0)
         # out1 = _branch(self.last_layer1, out1)
         # out2 = _branch(self.last_layer2, out2)
-        # output1->final_out_filter, 16, 16, 75
-        # output2->final_out_filter, 32, 32, 75
-        # output3->final_out_filter, 64, 64, 75
+        # out0->final_out_filter, 16, 16, 75
+        # out1->final_out_filter, 32, 32, 75
+        # out2->final_out_filter, 64, 64, 75
         # return out0, out1, out2
         return out0
 

@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+import numpy as np
 
 # 均方误差，是预测值与真实值之差的平方和的平均值
 def MSELoss(x, y):
@@ -160,11 +161,18 @@ class YOLOLoss(nn.Module):
         mask, noobj_mask, tx, ty, tw, th, tconf, tcls, box_loss_scale_x, box_loss_scale_y = self.get_target(targets,
                                                                 scaled_anchors, in_w, in_h, self.ignore_threshold)
 
+        #---------------------------------------------------------------#
+        #   将预测结果进行解码，判断预测结果和真实值的重合程度
+        #   如果重合程度过大则忽略，因为这些特征点属于预测比较准确的特征点
+        #   作为负样本不合适
+        #----------------------------------------------------------------#
+        # noobj_mask = self.get_ignore(prediction, targets, scaled_anchors, in_w, in_h, noobj_mask)
+
         box_loss_scale = 2 - box_loss_scale_x * box_loss_scale_y
 
         # 计算中心偏移情况的loss，使用BCELoss效果好一些
-        loss_x = torch.sum(BCELoss(x, tx) * box_loss_scale * mask)
-        loss_y = torch.sum(BCELoss(y, ty) * box_loss_scale * mask)
+        loss_x = torch.sum(MSELoss(x, tx) * 0.5 * box_loss_scale * mask)
+        loss_y = torch.sum(MSELoss(y, ty) * 0.5 * box_loss_scale * mask)
         # 计算宽高调整值的loss
         loss_w = torch.sum(MSELoss(w, tw) * 0.5 * box_loss_scale * mask)
         loss_h = torch.sum(MSELoss(h, th) * 0.5 * box_loss_scale * mask)
@@ -305,8 +313,8 @@ class YOLOLoss(nn.Module):
                     #   用于获得xywh的比例
                     #   大目标loss权重小，小目标loss权重大
                     # ----------------------------------------#
-                    box_loss_scale_x[b, best_n, gj, gi] = target[b][i, 2]  # 存放真实框的宽，高
-                    box_loss_scale_y[b, best_n, gj, gi] = target[b][i, 3]
+                    box_loss_scale_x[b, best_n, gj, gi] = target[b][i, 3]  # 存放真实框的宽，高
+                    box_loss_scale_y[b, best_n, gj, gi] = target[b][i, 4]
                     # ----------------------------------------#
                     #   tconf代表物体置信度
                     # ----------------------------------------#
@@ -320,6 +328,81 @@ class YOLOLoss(nn.Module):
                     continue
         return mask, noobj_mask, tx, ty, tw, th, tconf, tcls, box_loss_scale_x, box_loss_scale_y
 
+    def get_ignore(self, prediction, target, scaled_anchors, in_w, in_h, noobj_mask):
+        # -----------------------------------------------------#
+        #   计算一共有多少张图片
+        # -----------------------------------------------------#
+        bs = len(target)
+        # -------------------------------------------------------#
+        #   获得当前特征层先验框所属的编号，方便后面对先验框筛选
+        # -------------------------------------------------------#
+        anchor_index = [[0, 1, 2], [3, 4, 5], [6, 7, 8]][self.feature_length.index(in_w)]
+        scaled_anchors = np.array(scaled_anchors)
+
+        # 先验框的中心位置的调整参数
+        x = torch.sigmoid(prediction[..., 0])
+        y = torch.sigmoid(prediction[..., 1])
+        # 先验框的宽高调整参数
+        w = prediction[..., 2]  # Width
+        h = prediction[..., 3]  # Height
+
+        FloatTensor = torch.cuda.FloatTensor if x.is_cuda else torch.FloatTensor
+        LongTensor = torch.cuda.LongTensor if x.is_cuda else torch.LongTensor
+
+        # 生成网格，先验框中心，网格左上角
+        # torch.linspace生成一个已知开始值和结束值和长度的等差数组
+        grid_x = torch.linspace(0, in_w - 1, in_w).repeat(in_h, 1).repeat(
+            int(bs * self.num_anchors), 1, 1).view(x.shape).type(FloatTensor)
+        grid_y = torch.linspace(0, in_h - 1, in_h).repeat(in_w, 1).t().repeat(
+            int(bs * self.num_anchors), 1, 1).view(y.shape).type(FloatTensor)
+
+        # 生成先验框的宽高
+        anchor_w = FloatTensor(scaled_anchors).index_select(1, LongTensor([0]))
+        anchor_h = FloatTensor(scaled_anchors).index_select(1, LongTensor([1]))
+
+        anchor_w = anchor_w.repeat(bs, 1).repeat(1, 1, in_h * in_w).view(w.shape)
+        anchor_h = anchor_h.repeat(bs, 1).repeat(1, 1, in_h * in_w).view(h.shape)
+
+        # -------------------------------------------------------#
+        #   计算调整后的先验框中心与宽高
+        # -------------------------------------------------------#
+        pred_boxes = FloatTensor(prediction[..., :4].shape)
+        pred_boxes[..., 0] = x.data + grid_x
+        pred_boxes[..., 1] = y.data + grid_y
+        pred_boxes[..., 2] = torch.exp(w.data) * anchor_w
+        pred_boxes[..., 3] = torch.exp(h.data) * anchor_h
+
+        for i in range(bs):
+            pred_boxes_for_ignore = pred_boxes[i]
+            # -------------------------------------------------------#
+            #   将预测结果转换一个形式
+            #   pred_boxes_for_ignore      num_anchors, 4
+            # -------------------------------------------------------#
+            pred_boxes_for_ignore = pred_boxes_for_ignore.view(-1, 4)
+            # -------------------------------------------------------#
+            #   计算真实框，并把真实框转换成相对于特征层的大小
+            #   gt_box      num_true_box, 4
+            # -------------------------------------------------------#
+            if len(target[i]) > 0:
+                gx = target[i][:, 1:2] * in_w
+                gy = target[i][:, 2:3] * in_h
+                gw = target[i][:, 3:4] * in_w
+                gh = target[i][:, 4:5] * in_h
+                # gt_box = torch.FloatTensor(torch.cat([gx, gy, gw, gh], -1)).type(FloatTensor)
+                gt_box = torch.cat([gx, gy, gw, gh], -1)
+                # -------------------------------------------------------#
+                #   计算交并比
+                #   anch_ious       num_true_box, num_anchors
+                # -------------------------------------------------------#
+                anch_ious = CalculIOU(gt_box, pred_boxes_for_ignore)
+                # -------------------------------------------------------#
+                #   每个先验框对应真实框的最大重合度
+                #   anch_ious_max   num_anchors
+                # -------------------------------------------------------#
+                anch_ious_max, _ = torch.max(anch_ious, dim=0)
+                anch_ious_max = anch_ious_max.view(pred_boxes[i].size()[:3])
+                noobj_mask[i][anch_ious_max > self.ignore_threshold] = 0
+        return noobj_mask
 
 
 
