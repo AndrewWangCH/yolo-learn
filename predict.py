@@ -202,7 +202,7 @@ def main():
     decode_box = DecodeBox(config.Config['yolo']['anchors'][0], config.Config['yolo']['classes'], (config.Config['img_w'], config.Config['img_h']))
     model = torch.load('./model/yolov3.pth').to(device)
     model.eval()
-    data_path = "./data/number-test/test/1.1340.jpg"
+    data_path = "./data/number-test/test/11.1728.jpg"
 
     img = cv2.imread(data_path, 0)
     pil_img = Image.fromarray(img)
@@ -215,7 +215,7 @@ def main():
     ret = decode_box(output)
 
     batch_detections = non_max_suppression(ret, 2,
-                                           conf_thres=0.01,
+                                           conf_thres=0.1,
                                            nms_thres=0.5)
 
     # ---------------------------------------------------------#
@@ -224,6 +224,8 @@ def main():
     try:
         batch_detections = batch_detections[0].cpu().numpy()
     except:
+        cv2.imshow("w", img)
+        cv2.waitKey(0)
         return
 
     # ---------------------------------------------------------#

@@ -1,7 +1,7 @@
 Config = \
 {
     "yolo": {
-        "anchors": [[[120, 120]]],
+        "anchors": [[[140, 120]]],
         "classes": 2,
     },
 

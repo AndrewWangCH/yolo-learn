@@ -177,8 +177,7 @@ class YOLOLoss(nn.Module):
         loss_w = torch.sum(MSELoss(w, tw) * 0.5 * box_loss_scale * mask)
         loss_h = torch.sum(MSELoss(h, th) * 0.5 * box_loss_scale * mask)
         # 计算置信度的loss
-        loss_conf = torch.sum(BCELoss(conf, mask) * mask) + \
-                    torch.sum(BCELoss(conf, mask) * noobj_mask)
+        loss_conf = torch.sum(BCELoss(conf, mask) * mask) + torch.sum(BCELoss(conf, mask) * noobj_mask)
 
         loss_cls = torch.sum(BCELoss(pred_cls[mask == 1], tcls[mask == 1]))
 
@@ -327,6 +326,7 @@ class YOLOLoss(nn.Module):
                     print("图像尺寸错误！！！")
                     continue
         return mask, noobj_mask, tx, ty, tw, th, tconf, tcls, box_loss_scale_x, box_loss_scale_y
+
 
     def get_ignore(self, prediction, target, scaled_anchors, in_w, in_h, noobj_mask):
         # -----------------------------------------------------#

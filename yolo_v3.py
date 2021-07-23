@@ -52,7 +52,7 @@ class YoloBody(nn.Module):
 
         final_out_filter = (num_class + 1 + 4) * num_anchor     # num_anchor-->代表一组有几个anchors
         self.last_layer0 = make_last_layers([512, 1024], 1024, final_out_filter)
-        # self.last_layer1 = make_last_layers([256, 512], 512, final_out_filter)    // 此时只有一个先验框，且为大目标
+        # self.last_layer1 = make_last_layers([256, 512], 512, final_out_filter)    # 此时只有一个先验框，且为大目标
         # self.last_layer2 = make_last_layers([128, 256], 256, final_out_filter)
 
     def forward(self, x):
