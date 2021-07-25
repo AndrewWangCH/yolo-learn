@@ -53,6 +53,35 @@ def CalculIOU(_box_a, _box_b):
     union = area_a + area_b - inter
     return inter / union
 
+def CalculIOU2(gxs, gys, gws, ghs, in_w, in_h, anchors, noobj_mask):
+    """
+    :param gxs: 相对于特征层的真实框的x坐标（中心点 x）
+    :param gys: 相对于特征层的真实框的y坐标 (中心点 y）
+    :param gws: 相对于特征层的真实框的宽
+    :param ghs: 相对于特征层的真实框的高
+    :param in_w: 特征图宽
+    :param in_h: 特征图高
+    :param anchors: 相对于特征层的先验框
+    :param noobj_mask: 无特征点的mask
+    :return: noobj_mask
+    """
+
+    tl_x = gxs - gws/2
+    tl_y = gys - ghs/2  # bbox 左上角顶点
+    br_x = gxs + gws/2
+    br_y = gys + ghs/2  # bbox 右下角顶点
+
+    # for i in range(in_h):
+    #     for j in range(in_w):
+    #         if i > br_y and j > br_x:
+
+
+
+
+
+
+    return noobj_mask
+
 
 class YOLOLoss(nn.Module):
     def __init__(self, anchors, num_class, img_size, normalize):
