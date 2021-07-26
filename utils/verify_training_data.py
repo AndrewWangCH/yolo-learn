@@ -1,6 +1,7 @@
 import os
 import cv2
 
+
 # 验证训练集的bbox是否ok
 def test_data(path, img_format):
     file = os.listdir(path + "label")

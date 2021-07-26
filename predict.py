@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from torchvision.ops import nms
 import torch.nn as nn
 import config
+import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -135,6 +136,8 @@ def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
         # ----------------------------------------------------------#
         #   利用置信度进行第一轮筛选
         # ----------------------------------------------------------#
+        # np.set_printoptions(threshold=np.inf)
+        # print(image_pred[:, 4].cpu().detach().numpy())
         conf_mask = (image_pred[:, 4] * class_conf[:, 0] >= conf_thres).squeeze()
 
         # ----------------------------------------------------------#
@@ -202,51 +205,54 @@ def main():
     decode_box = DecodeBox(config.Config['yolo']['anchors'][0], config.Config['yolo']['classes'], (config.Config['img_w'], config.Config['img_h']))
     model = torch.load('./model/yolov3.pth').to(device)
     model.eval()
-    data_path = "./data/number-test/test/11.1728.jpg"
+    data_path = "./data/number-test/train/image/"
+    file = os.listdir(data_path)
 
-    img = cv2.imread(data_path, 0)
-    pil_img = Image.fromarray(img)
-    tensor_img = transform(pil_img).to(device)
+    for i in range(len(file)):
 
-    image = torch.autograd.Variable(torch.unsqueeze(tensor_img, dim=0).float(), requires_grad=False)
+        img = cv2.imread(data_path + file[i], 0)
+        pil_img = Image.fromarray(img)
+        tensor_img = transform(pil_img).to(device)
 
-    output = model(image).to(device)
+        image = torch.autograd.Variable(torch.unsqueeze(tensor_img, dim=0).float(), requires_grad=False)
 
-    ret = decode_box(output)
+        output = model(image).to(device)
 
-    batch_detections = non_max_suppression(ret, 2,
-                                           conf_thres=0.1,
-                                           nms_thres=0.5)
+        ret = decode_box(output)
 
-    # ---------------------------------------------------------#
-    #   如果没有检测出物体，返回原图
-    # ---------------------------------------------------------#
-    try:
-        batch_detections = batch_detections[0].cpu().numpy()
-    except:
-        cv2.imshow("w", img)
-        cv2.waitKey(0)
-        return
+        batch_detections = non_max_suppression(ret, 2,
+                                               conf_thres=0.1,
+                                               nms_thres=0.5)
 
-    # ---------------------------------------------------------#
-    #   对预测框进行得分筛选
-    # ---------------------------------------------------------#
-    top_index = batch_detections[:, 4] * batch_detections[:, 5] > 0.01  # self.confidence
-    top_conf = batch_detections[top_index, 4] * batch_detections[top_index, 5]
-    top_label = np.array(batch_detections[top_index, -1], np.int32)
-    top_bboxes = np.array(batch_detections[top_index, :4])
-    top_xmin, top_ymin, top_xmax, top_ymax = np.expand_dims(top_bboxes[:, 0], -1), np.expand_dims(top_bboxes[:, 1], -1), \
-                                             np.expand_dims(top_bboxes[:, 2], -1), np.expand_dims(top_bboxes[:, 3], -1)
+        # ---------------------------------------------------------#
+        #   如果没有检测出物体，返回原图
+        # ---------------------------------------------------------#
+        try:
+            batch_detections = batch_detections[0].cpu().numpy()
+        except:
+            cv2.imshow("w", img)
+            cv2.waitKey(0)
+            return
 
-    boxes = np.concatenate([top_ymin, top_xmin, top_ymax, top_xmax], axis=-1)
+        # ---------------------------------------------------------#
+        #   对预测框进行得分筛选
+        # ---------------------------------------------------------#
+        top_index = batch_detections[:, 4] * batch_detections[:, 5] > 0.01  # self.confidence
+        top_conf = batch_detections[top_index, 4] * batch_detections[top_index, 5]
+        top_label = np.array(batch_detections[top_index, -1], np.int32)
+        top_bboxes = np.array(batch_detections[top_index, :4])
+        top_xmin, top_ymin, top_xmax, top_ymax = np.expand_dims(top_bboxes[:, 0], -1), np.expand_dims(top_bboxes[:, 1], -1), \
+                                                 np.expand_dims(top_bboxes[:, 2], -1), np.expand_dims(top_bboxes[:, 3], -1)
 
-    for i, c in enumerate(top_label):
-        print(c)
-        print(top_conf[i])
-        top, left, bottom, right = boxes[i]
-        cv2.rectangle(img, (top, left), (bottom, right), (0), 3, 8)
-        cv2.imshow("w", img)
-        cv2.waitKey(0)
+        boxes = np.concatenate([top_ymin, top_xmin, top_ymax, top_xmax], axis=-1)
+
+        for i, c in enumerate(top_label):
+            print(c)
+            print(top_conf[i])
+            top, left, bottom, right = boxes[i]
+            cv2.rectangle(img, (top, left), (bottom, right), (0), 3, 8)
+            cv2.imshow("w", img)
+            cv2.waitKey(0)
 
 
 

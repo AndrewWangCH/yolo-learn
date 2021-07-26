@@ -53,7 +53,7 @@ def CalculIOU(_box_a, _box_b):
     union = area_a + area_b - inter
     return inter / union
 
-def CalculIOU2(gxs, gys, gws, ghs, in_w, in_h, anchors, noobj_mask):
+def CalculIOU2(batch_size, gxs, gys, gws, ghs, in_w, in_h, anchors, noobj_mask, threshold):
     """
     :param gxs: 相对于特征层的真实框的x坐标（中心点 x）
     :param gys: 相对于特征层的真实框的y坐标 (中心点 y）
@@ -68,18 +68,45 @@ def CalculIOU2(gxs, gys, gws, ghs, in_w, in_h, anchors, noobj_mask):
 
     tl_x = gxs - gws/2
     tl_y = gys - ghs/2  # bbox 左上角顶点
-    br_x = gxs + gws/2
-    br_y = gys + ghs/2  # bbox 右下角顶点
 
-    # for i in range(in_h):
-    #     for j in range(in_w):
-    #         if i > br_y and j > br_x:
+    br_x = gxs + gws/2  # bbox 右下角顶点
+    br_y = gys + ghs/2
 
+    # tr_x = br_x  # bbox 右上角顶点
+    # tr_y = tl_y
+    # bl_x = tl_x         # bbox 左下角顶点
+    # bl_y = br_y
 
+    anchors_w = anchors[0][0] / 2  # 先验框宽高/2
+    anchors_h = anchors[0][1] / 2
 
+    for row in range(in_h):
+        for col in range(in_w):
+            anchors_tlx = col - anchors_w
+            anchors_brx = col + anchors_w
+            anchors_tly = row - anchors_h
+            anchors_bry = row + anchors_h
+            if anchors_tlx < 0 or anchors_tly < 0 or anchors_bry > in_h or anchors_brx > in_w:  # 先验框在特征图外
+                continue
 
+            if anchors_brx > tl_x and anchors_bry > tl_y and anchors_tlx < br_x and anchors_tly < br_y:  # 保证先验框与真实框有交集
+                sum_area = gws * ghs + anchors[0][0] * anchors[0][1]    # 并集面积 + 交集面积
+                new_bbox_tlx = tl_x if tl_x < anchors_tlx else anchors_tlx
+                new_bbox_tly = tl_y if tl_y < anchors_tly else anchors_tly
+                new_bbox_brx = br_x if br_x > anchors_brx else anchors_brx
+                new_bbox_bry = br_y if br_y > anchors_bry else anchors_bry
+                new_bbox_w = new_bbox_brx - new_bbox_tlx
+                new_bbox_h = new_bbox_bry - new_bbox_tly
+                new_bbox_area = new_bbox_w * new_bbox_h   # 得到两个框的外接矩形面积
+                superfluous_area = (new_bbox_h - ghs) * (new_bbox_w - anchors[0][0]) + (new_bbox_h - anchors[0][1]) * (new_bbox_w - gws)    # 外接矩形中多余的面积
+                union_area = new_bbox_area - superfluous_area   # 并集面积
+                inter = sum_area - union_area   # 交集面积
+                iou = inter / union_area
 
-
+                if iou > threshold:
+                    noobj_mask[batch_size, 0, row, col] = 0
+                    # np.set_printoptions(threshold=np.inf)
+                    # print(noobj_mask.cpu().detach().numpy())
     return noobj_mask
 
 
@@ -159,8 +186,7 @@ class YOLOLoss(nn.Module):
         #   batch_size, 3, 52, 52, 5 + num_classes
         #   prediction 是预测结果进行展开
         # -----------------------------------------------#
-        prediction = input.view(bs, int(self.num_anchors), self.bbox_attrs, in_h, in_w).permute(0, 1, 3, 4,
-                                                                                                    2).contiguous()
+        prediction = input.view(bs, int(self.num_anchors), self.bbox_attrs, in_h, in_w).permute(0, 1, 3, 4, 2).contiguous()
 
         # -----------待拟合的数据------------------------#
         # 先验框的中心位置的调整参数
@@ -279,6 +305,11 @@ class YOLOLoss(nn.Module):
             gjs = torch.floor(gys)
 
             # -------------------------------------------------------#
+            #   计算每个点的IOU，重新计算confidence  wzl+
+            # -------------------------------------------------------#
+            noobj_mask = CalculIOU2(b, gxs, gys, gws, ghs, in_w, in_h, anchors, noobj_mask, 0.5)
+
+            # -------------------------------------------------------#
             #   将真实框转换一个形式
             #   num_true_box, 4
             # -------------------------------------------------------#
@@ -302,8 +333,8 @@ class YOLOLoss(nn.Module):
             for i, best_n in enumerate(best_ns):
                 if best_n not in anchor_index:
                     continue
-                if anch_ious[i][int(best_n.item())] < ignore_threshold:     # 如果最大的IOU小于阈值则认为没有物体
-                    continue
+                # if anch_ious[i][int(best_n.item())] < ignore_threshold:     # 如果最大的IOU小于阈值则认为没有物体
+                #     continue
                 # -------------------------------------------------------------#
                 #   取出各类坐标：
                 #   gi和gj代表的是真实框对应的特征点的x轴y轴坐标

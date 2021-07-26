@@ -61,6 +61,7 @@ class YoloBody(nn.Module):
                 layer_in = e(layer_in)
             return layer_in
 
+        #with torch.no_grad():
         out0, out1, out2 = self.backbone(x)
         out0 = _branch(self.last_layer0, out0)
         # out1 = _branch(self.last_layer1, out1)

@@ -27,6 +27,9 @@ class MyDataset(DataLoader):
 
     def __getitem__(self, index):
         files = os.listdir(self.label_path)
+        files_num = len(files)
+        if index >= files_num:
+            index = files_num - 1
         index_files = files[index]
         image_name = index_files.split('.')[0] + '.png'
         img = cv2.imread(self.image_path + image_name, self.img_channel)
@@ -45,7 +48,7 @@ class MyDataset(DataLoader):
 
 
 # if __name__ == '__main__':
-#     train_dateset = MyDataset(data_path='./data/number-test/',
+#     train_dateset = MyDataset(data_path='./data/number-test/train/',
 #                               transform=image_transform)
 #
 #     train_dateset.__getitem__(1)

@@ -35,7 +35,7 @@ def fit_ont_epoch(net, yolo_losses, train_loader):
 
 if __name__ == "__main__":
     yolo_config = config.Config
-    batch_size = 8
+    batch_size = 4
     # ------------------------------------------------------#
     #   是否对损失进行归一化，用于改变loss的大小
     #   用于决定计算最终loss是除上batch_size还是除上正样本数量
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     train_dataset = dataset.MyDataset(data_path="./data/number-test/train/",
                                       transform=dataset.image_transform)
 
-    train_loader = dataset.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+    train_loader = dataset.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
     # net = torch.load('./model/yolov3.pth').to(device)
     net = yolo_v3.YoloBody(yolo_config).to(device)
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     #------------------------------------------------------#
     #   主干特征提取网络特征通用，冻结训练可以加快训练速度
     #------------------------------------------------------#
-    lr = 1e-4
+    lr = 1e-3
     optimizer = torch.optim.Adam(net.parameters(), lr)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.92)
 
