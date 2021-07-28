@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import numpy as np
+from utils import focal_loss
 
 # 均方误差，是预测值与真实值之差的平方和的平均值
 def MSELoss(x, y):
@@ -138,6 +139,8 @@ class YOLOLoss(nn.Module):
 
         self.ignore_threshold = 0.5  # 挑选负样本的阈值
 
+        self.focalloss = focal_loss.FocalLoss()
+
 
     def forward(self, input, targets=None):
         """
@@ -186,7 +189,7 @@ class YOLOLoss(nn.Module):
         #   batch_size, 3, 52, 52, 5 + num_classes
         #   prediction 是预测结果进行展开
         # -----------------------------------------------#
-        prediction = input.view(bs, int(self.num_anchors), self.bbox_attrs, in_h, in_w).permute(0, 1, 3, 4, 2).contiguous()
+        prediction = input.view(bs, int(self.num_anchors / 3), self.bbox_attrs, in_h, in_w).permute(0, 1, 3, 4, 2).contiguous()
 
         # -----------待拟合的数据------------------------#
         # 先验框的中心位置的调整参数
@@ -221,7 +224,7 @@ class YOLOLoss(nn.Module):
         #   如果重合程度过大则忽略，因为这些特征点属于预测比较准确的特征点
         #   作为负样本不合适
         #----------------------------------------------------------------#
-        # noobj_mask = self.get_ignore(prediction, targets, scaled_anchors, in_w, in_h, noobj_mask)
+        noobj_mask = self.get_ignore(prediction, targets, scaled_anchors, in_w, in_h, noobj_mask)
 
         box_loss_scale = 2 - box_loss_scale_x * box_loss_scale_y
 
@@ -233,6 +236,7 @@ class YOLOLoss(nn.Module):
         loss_h = torch.sum(MSELoss(h, th) * 0.5 * box_loss_scale * mask)
         # 计算置信度的loss
         loss_conf = torch.sum(BCELoss(conf, mask) * mask) + torch.sum(BCELoss(conf, mask) * noobj_mask)
+        # loss_conf = torch.sum(self.focalloss(conf, mask) * mask) + torch.sum(self.focalloss(conf, mask) * noobj_mask)
 
         loss_cls = torch.sum(BCELoss(pred_cls[mask == 1], tcls[mask == 1]))
 
@@ -270,17 +274,17 @@ class YOLOLoss(nn.Module):
         # -------------------------------------------------------#
         #   创建全是0或者全是1的阵列
         # -------------------------------------------------------#
-        mask = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
-        noobj_mask = torch.ones(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
-        tx = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
-        ty = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
-        tw = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
-        th = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
-        tconf = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
-        tcls = torch.zeros(bs, int(self.num_anchors), in_h, in_w, self.num_classes, requires_grad=False).cuda()
+        mask = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        noobj_mask = torch.ones(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        tx = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        ty = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        tw = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        th = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        tconf = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        tcls = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, self.num_classes, requires_grad=False).cuda()
 
-        box_loss_scale_x = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
-        box_loss_scale_y = torch.zeros(bs, int(self.num_anchors), in_h, in_w, requires_grad=False).cuda()
+        box_loss_scale_x = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        box_loss_scale_y = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
 
         for b in range(bs):  # 遍历一个batch_size
             if len(target[b]) == 0:  # 图中没有目标
@@ -307,7 +311,7 @@ class YOLOLoss(nn.Module):
             # -------------------------------------------------------#
             #   计算每个点的IOU，重新计算confidence  wzl+
             # -------------------------------------------------------#
-            noobj_mask = CalculIOU2(b, gxs, gys, gws, ghs, in_w, in_h, anchors, noobj_mask, 0.5)
+            # noobj_mask = CalculIOU2(b, gxs, gys, gws, ghs, in_w, in_h, anchors, noobj_mask, 0.5)
 
             # -------------------------------------------------------#
             #   将真实框转换一个形式
@@ -397,7 +401,7 @@ class YOLOLoss(nn.Module):
         #   获得当前特征层先验框所属的编号，方便后面对先验框筛选
         # -------------------------------------------------------#
         anchor_index = [[0, 1, 2], [3, 4, 5], [6, 7, 8]][self.feature_length.index(in_w)]
-        scaled_anchors = np.array(scaled_anchors)
+        scaled_anchors = np.array(scaled_anchors)[anchor_index]
 
         # 先验框的中心位置的调整参数
         x = torch.sigmoid(prediction[..., 0])
@@ -412,9 +416,9 @@ class YOLOLoss(nn.Module):
         # 生成网格，先验框中心，网格左上角
         # torch.linspace生成一个已知开始值和结束值和长度的等差数组
         grid_x = torch.linspace(0, in_w - 1, in_w).repeat(in_h, 1).repeat(
-            int(bs * self.num_anchors), 1, 1).view(x.shape).type(FloatTensor)
+            int(bs * self.num_anchors/3), 1, 1).view(x.shape).type(FloatTensor)
         grid_y = torch.linspace(0, in_h - 1, in_h).repeat(in_w, 1).t().repeat(
-            int(bs * self.num_anchors), 1, 1).view(y.shape).type(FloatTensor)
+            int(bs * self.num_anchors/3), 1, 1).view(y.shape).type(FloatTensor)
 
         # 生成先验框的宽高
         anchor_w = FloatTensor(scaled_anchors).index_select(1, LongTensor([0]))

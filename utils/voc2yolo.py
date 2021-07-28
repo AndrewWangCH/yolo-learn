@@ -31,7 +31,7 @@ if __name__ == '__main__':
     xml_dir = 'C:\\Users\\wzl\\Desktop\\yolo_img\\xml\\'
     xml_file = os.listdir(xml_dir)
     save_txt_path = "C:\\Users\\wzl\\Desktop\\yolo_img\\txt\\"
-    class_dict = {'0': 0}  # 数据集类别
+    class_dict = {'0': 0, "1": 1}  # 数据集类别
 
     for i in range(len(xml_file)):
         xml_path = xml_dir + xml_file[i]

@@ -202,7 +202,6 @@ def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
 
 
 def main():
-    decode_box = DecodeBox(config.Config['yolo']['anchors'][0], config.Config['yolo']['classes'], (config.Config['img_w'], config.Config['img_h']))
     model = torch.load('./model/yolov3.pth').to(device)
     model.eval()
     data_path = "./data/number-test/train/image/"
@@ -216,11 +215,18 @@ def main():
 
         image = torch.autograd.Variable(torch.unsqueeze(tensor_img, dim=0).float(), requires_grad=False)
 
-        output = model(image).to(device)
+        yolo_decodes = []
+        for i in range(3):
+            yolo_decodes.append(DecodeBox(config.Config['yolo']['anchors'][i], config.Config['yolo']['classes'], (config.Config['img_w'], config.Config['img_h'])))
 
-        ret = decode_box(output)
+        output = model(image)
 
-        batch_detections = non_max_suppression(ret, 2,
+        output_list = []
+        for i in range(3):
+            output_list.append(yolo_decodes[i](output[i]))
+
+        ret = torch.cat(output_list, 1)
+        batch_detections = non_max_suppression(ret, config.Config['yolo']['classes'],
                                                conf_thres=0.1,
                                                nms_thres=0.5)
 
@@ -249,8 +255,10 @@ def main():
         for i, c in enumerate(top_label):
             print(c)
             print(top_conf[i])
+            if top_conf[i] < 0.6:
+                continue
             top, left, bottom, right = boxes[i]
-            cv2.rectangle(img, (top, left), (bottom, right), (0), 3, 8)
+            cv2.rectangle(img, (left, top), (right, bottom), (0), 3, 8)
             cv2.imshow("w", img)
             cv2.waitKey(0)
 
