@@ -112,7 +112,7 @@ def CalculIOU2(batch_size, gxs, gys, gws, ghs, in_w, in_h, anchors, noobj_mask, 
 
 
 class YOLOLoss(nn.Module):
-    def __init__(self, anchors, num_class, img_size, normalize):
+    def __init__(self, anchors, num_class, img_size, anchors_group, anchors_group_num, normalize):
         """
         :param anchors: 代表config.py中的anchor即先验框
         :param num_class: 代表有几类
@@ -133,13 +133,14 @@ class YOLOLoss(nn.Module):
         #   获得特征层的宽高
         #   13、26、52
         # -------------------------------------#
-        self.feature_length = [img_size[0] // 32, img_size[0] // 16, img_size[0] // 8]
+        self.feature_length = [img_size[0] // 32, img_size[0] // 16, img_size[0] // 8]  # darknet 时是这样, 更换backbone时需要调整
         self.img_size = img_size
         self.normalize = normalize
-
         self.ignore_threshold = 0.5  # 挑选负样本的阈值
 
-        self.focalloss = focal_loss.FocalLoss()
+        self.anchors_group_num = anchors_group_num
+
+        # self.focalloss = focal_loss.FocalLoss()  # 用不用focal loss
 
 
     def forward(self, input, targets=None):
@@ -189,7 +190,7 @@ class YOLOLoss(nn.Module):
         #   batch_size, 3, 52, 52, 5 + num_classes
         #   prediction 是预测结果进行展开
         # -----------------------------------------------#
-        prediction = input.view(bs, int(self.num_anchors / 3), self.bbox_attrs, in_h, in_w).permute(0, 1, 3, 4, 2).contiguous()
+        prediction = input.view(bs, int(self.anchors_group_num), self.bbox_attrs, in_h, in_w).permute(0, 1, 3, 4, 2).contiguous()
 
         # -----------待拟合的数据------------------------#
         # 先验框的中心位置的调整参数
@@ -224,7 +225,7 @@ class YOLOLoss(nn.Module):
         #   如果重合程度过大则忽略，因为这些特征点属于预测比较准确的特征点
         #   作为负样本不合适
         #----------------------------------------------------------------#
-        noobj_mask = self.get_ignore(prediction, targets, scaled_anchors, in_w, in_h, noobj_mask)
+        # noobj_mask = self.get_ignore(prediction, targets, scaled_anchors, in_w, in_h, noobj_mask)
 
         box_loss_scale = 2 - box_loss_scale_x * box_loss_scale_y
 
@@ -274,17 +275,17 @@ class YOLOLoss(nn.Module):
         # -------------------------------------------------------#
         #   创建全是0或者全是1的阵列
         # -------------------------------------------------------#
-        mask = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
-        noobj_mask = torch.ones(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
-        tx = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
-        ty = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
-        tw = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
-        th = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
-        tconf = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
-        tcls = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, self.num_classes, requires_grad=False).cuda()
+        mask = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
+        noobj_mask = torch.ones(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
+        tx = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
+        ty = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
+        tw = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
+        th = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
+        tconf = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
+        tcls = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, self.num_classes, requires_grad=False).cuda()
 
-        box_loss_scale_x = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
-        box_loss_scale_y = torch.zeros(bs, int(self.num_anchors/3), in_h, in_w, requires_grad=False).cuda()
+        box_loss_scale_x = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
+        box_loss_scale_y = torch.zeros(bs, int(self.anchors_group_num), in_h, in_w, requires_grad=False).cuda()
 
         for b in range(bs):  # 遍历一个batch_size
             if len(target[b]) == 0:  # 图中没有目标
@@ -317,13 +318,14 @@ class YOLOLoss(nn.Module):
             #   将真实框转换一个形式
             #   num_true_box, 4
             # -------------------------------------------------------#
-            gt_box = torch.cuda.FloatTensor(torch.cat([torch.zeros_like(gws), torch.zeros_like(ghs), gws, ghs], 1))
+            gt_box = torch.cat([torch.zeros_like(gws), torch.zeros_like(ghs), gws, ghs], 1).cuda()
+            # gt_box = torch.cuda.FloatTensor(torch.cat([torch.zeros_like(gws), torch.zeros_like(ghs), gws, ghs], 1))
 
             # -------------------------------------------------------#
             #   将先验框转换一个形式
             # -------------------------------------------------------#
-            anchor_shapes = torch.FloatTensor(torch.cat((torch.zeros((self.num_anchors, 2)), torch.FloatTensor(anchors)), 1))
-            anchor_shapes = anchor_shapes.cuda()
+            anchor_shapes = torch.cat((torch.zeros((self.num_anchors, 2)), torch.FloatTensor(anchors)), 1).cuda()
+            # anchor_shapes = torch.cuda.FloatTensor(torch.cat((torch.zeros((self.num_anchors, 2)), torch.FloatTensor(anchors)), 1))
 
             # -------------------------------------------------------#
             #   计算交并比

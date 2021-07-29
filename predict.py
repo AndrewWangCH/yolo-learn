@@ -202,6 +202,8 @@ def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
 
 
 def main():
+    yolo_config = config.Config
+
     model = torch.load('./model/yolov3.pth').to(device)
     model.eval()
     data_path = "./data/number-test/train/image/"
@@ -213,20 +215,21 @@ def main():
         pil_img = Image.fromarray(img)
         tensor_img = transform(pil_img).to(device)
 
-        image = torch.autograd.Variable(torch.unsqueeze(tensor_img, dim=0).float(), requires_grad=False)
+        # image = torch.autograd.Variable(torch.unsqueeze(tensor_img, dim=0).float(), requires_grad=False)
+        image = torch.unsqueeze(tensor_img, dim=0).float()
 
         yolo_decodes = []
-        for i in range(3):
-            yolo_decodes.append(DecodeBox(config.Config['yolo']['anchors'][i], config.Config['yolo']['classes'], (config.Config['img_w'], config.Config['img_h'])))
+        for i in range(yolo_config['anchors_group']):
+            yolo_decodes.append(DecodeBox(yolo_config['yolo']['anchors'][i], yolo_config['yolo']['classes'], (yolo_config['img_w'], yolo_config['img_h'])))
 
         output = model(image)
 
         output_list = []
-        for i in range(3):
-            output_list.append(yolo_decodes[i](output[i]))
+        for i in range(yolo_config['anchors_group']):
+            output_list.append(yolo_decodes[i](output))
 
         ret = torch.cat(output_list, 1)
-        batch_detections = non_max_suppression(ret, config.Config['yolo']['classes'],
+        batch_detections = non_max_suppression(ret, yolo_config['yolo']['classes'],
                                                conf_thres=0.1,
                                                nms_thres=0.5)
 
