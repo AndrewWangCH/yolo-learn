@@ -16,17 +16,21 @@ def get_lr(optimizer):
 def fit_ont_epoch(net, yolo_losses, train_loader, optimizer, yolo_config):
     net.train()
     total_loss = 0
-    for batch_idx, data in enumerate(train_loader, 0):
+    for batch_idx, data in enumerate(train_loader):
         images, target = data[0], data[1]
-        images = images.to(device)
-        target = target.to(device)
+
+        images = torch.autograd.Variable(torch.from_numpy(images).type(torch.FloatTensor)).cuda()
+        target = [torch.autograd.Variable(torch.from_numpy(ann).type(torch.FloatTensor)).cuda() for ann in target]
+
+        # images = images.to(device)
+        # target = target.to(device)
 
         optimizer.zero_grad()
         outputs = net(images)  # 3个特征图
         losses = []
         num_pos_all = 0
         for i in range(yolo_config['anchors_group']):
-            loss_item, num_pos = yolo_losses(outputs, target)
+            loss_item, num_pos = yolo_losses(outputs[i], target)
             losses.append(loss_item)
             num_pos_all += num_pos
 
@@ -46,20 +50,20 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     normalize = True
 
-    train_dataset = dataset.MyDataset(data_path="./data/number-test/train/",
+    train_dataset = dataset.MyDataset(data_path="./data/circle/train/",
                                       transform=dataset.image_transform)
 
-    train_loader = dataset.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    train_loader = dataset.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, collate_fn=dataset.yolo_dataset_collate)
 
-    # net = torch.load('./model/yolov3.pth').to(device)
-    net = yolo_v3.YoloBody(yolo_config).to(device)
+    net = torch.load('./model/yolov3.pth').to(device)
+    # net = yolo_v3.YoloBody(yolo_config).to(device)
 
     # 建立yolo函数
     yolo_loss = yolo_v3_loss.YOLOLoss(np.reshape(yolo_config["yolo"]["anchors"], [-1, 2]),
                                            yolo_config["yolo"]["classes"], (yolo_config["img_w"], yolo_config["img_h"]),
                                            yolo_config['anchors_group'], yolo_config['anchors_group'], normalize)
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(net.parameters(), lr=0.0003)
     # optimizer = torch.optim.SGD(net.parameters(), lr=lr)
     # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.92)
 

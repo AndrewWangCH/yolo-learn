@@ -1,5 +1,6 @@
 import os
 import cv2
+import config
 
 
 # 验证训练集的bbox是否ok
@@ -15,10 +16,10 @@ def test_data(path, img_format):
             for line in f.readlines():
                 str_data = line.strip('\n')  # 去掉列表中每一个元素的换行符
                 str_data = str_data.split(" ")
-                center_x = float(str_data[1]) * 416
-                center_y = float(str_data[2]) * 416
-                w = float(str_data[3]) * 416
-                h = float(str_data[4]) * 416
+                center_x = float(str_data[1]) * config.Config['img_w']
+                center_y = float(str_data[2]) * config.Config['img_h']
+                w = float(str_data[3]) * config.Config['img_w']
+                h = float(str_data[4]) * config.Config['img_h']
 
                 tl = (int(center_x - w/2), int(center_y - h/2))
                 br = (int(center_x + w/2), int(center_y + h/2))
@@ -29,6 +30,6 @@ def test_data(path, img_format):
 
 
 if __name__ == "__main__":
-    path = 'D:\\GitHub\\yolo-learn\\data\\number-test\\train\\'
+    path = 'D:\\GitHub\\yolo-learn\\data\\circle\\train\\'
     img_format = '.png'
     test_data(path, img_format)
